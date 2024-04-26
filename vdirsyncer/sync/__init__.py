@@ -33,6 +33,14 @@ from .status import SubStatus
 sync_logger = logging.getLogger(__name__)
 
 
+def batched(iterable, n):
+    if n < 1:
+        raise ValueError('n must be at least 1')
+    it = iter(iterable)
+    while batch := tuple(itertools.islice(it, n)):
+        yield batch
+
+
 class _StorageInfo:
     """A wrapper class that holds prefetched items, the status and other
     things."""
@@ -66,12 +74,13 @@ class _StorageInfo:
 
         # Prefetch items
         if prefetch:
-            async for href, item, etag in self.storage.get_multi(prefetch):
-                _store_props(
-                    item.ident,
-                    ItemMetadata(href=href, hash=item.hash, etag=etag),
-                )
-                self.set_item_cache(item.ident, item)
+            for batch in batched(prefetch, 20):
+                async for href, item, etag in self.storage.get_multi(batch):
+                    _store_props(
+                        item.ident,
+                        ItemMetadata(href=href, hash=item.hash, etag=etag),
+                    )
+                    self.set_item_cache(item.ident, item)
 
         return storage_nonempty
 
